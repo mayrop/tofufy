@@ -266,7 +266,7 @@ def normalize_record(record: dict, zone_name: str, zone_id: str) -> Optional[Dic
         values: List[str] = []
         for entry in resource_records:
             value = entry.get("Value", "")
-            if record_type == "TXT" and value.startswith('"') and value.endswith('"'):
+            if record_type in {"TXT", "SPF"} and value.startswith('"') and value.endswith('"'):
                 value = value[1:-1].replace('\\"', '"')
             value = escape_percent_signs(value)
             values.append(value)
