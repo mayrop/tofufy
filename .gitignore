@@ -1,0 +1,11 @@
+# Python
+.idea
+*.pyc
+*.p12
+*.pem
+__pycache__
+__pycache__/
+.vscode
+.install.stamp
+.dmypy.json
+.pytest_cache/

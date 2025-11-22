@@ -1,0 +1,19 @@
+[project]
+name = "tofufy"
+version = "0.1.0"
+description = "Tool to export resources to tofu"
+readme = "README.md"
+authors = [
+    { name = "Mayra Valdes", email = "4valdes@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "boto3>=1.41.2",
+]
+
+[project.scripts]
+tofufy = "tofufy.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.9.11,<0.10.0"]
+build-backend = "uv_build"
