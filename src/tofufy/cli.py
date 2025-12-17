@@ -16,6 +16,7 @@ DEFAULT_CONFIG_PATH = "config-route53.json"
 
 SKIP_RECORD_TYPES = {"NS", "SOA"}
 SKIPPABLE_IMPORT_TYPES = {"A", "CNAME"}
+RECORD_SUFFIX_EXEMPT_TYPES = {"A", "CNAME"}
 
 DEFAULT_ARGUMENTS: Dict[str, Any] = {
     "zone_ids": [],
@@ -240,7 +241,17 @@ def to_snake_case(value: str) -> str:
 def build_record_key(record_name: str, zone_name: str, record_type: str) -> Tuple[str, str, str]:
     relative_name = compute_relative_name(record_name, zone_name)
     subdomain = sanitize_subdomain(relative_name)
-    return f"{record_type.lower()}_{subdomain}", relative_name, subdomain
+    record_key = subdomain
+
+    if (relative_name and relative_name.startswith("_")) or (
+        subdomain and subdomain[0].isdigit()
+    ):
+        record_key = f"record_{record_key}"
+
+    if record_type.upper() not in RECORD_SUFFIX_EXEMPT_TYPES:
+        record_key = f"{record_key}_{record_type.lower()}"
+
+    return record_key, relative_name, subdomain
 
 
 def normalize_record(record: dict, zone_name: str, zone_id: str) -> Optional[Dict[str, Any]]:
