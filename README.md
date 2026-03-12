@@ -72,10 +72,10 @@ The tool will not run without this file.
 - `skippable_import_types` – record types that can be filtered by `skip_hostnames`/`only_hostnames` when building import statements.
 
 #### Multi-zone
-- `zones_file` – Destination path describing each hosted zone. Only written `single_zone` is `false`.
+- `zones_file` – Destination path describing each hosted zone. Only written when `single_zone` is `false`.
 
 #### Single zone
-- `single_zone` – When `true`, you must list exactly one `zone_id`; records go into `single_zone_records_file` and a dedicated locals block (`# BEGIN/END GENERATED PRIMARY ZONE`) is inserted into `locals_file`.
+- `single_zone` – When `true`, you must list exactly one `zone_id`; records go into `single_zone_records_file` and a dedicated `locals.zone` block (`# BEGIN/END GENERATED PRIMARY ZONE`) is inserted into `locals_file`. If `export_target` includes `zones`, that block contains the real hosted zone metadata, including `private_zone`, `tags`, and private-zone `vpcs`.
 - `single_zone_records_file` – Destination path for the monolithic records file created in `--single-zone` mode.
 
 ### Options
@@ -91,7 +91,7 @@ For a full list of options (including defaults sourced from the config file) run
 Running `tofufy` creates or updates the following:
 
 - `route53-records-<zone>.tf` in `output_dir`: locals for every record in the zone and a matching `local.zone_records_<zone>` map.
-- `locals_file`: contains a `locals { zone_records = merge(...) }` block assembling all zone locals and (in single-zone mode) a `locals.zone` block for the primary zone.
+- `locals_file`: contains a `locals { zone_records = merge(...) }` block assembling all zone locals and (in single-zone mode) a `locals.zone` block for the primary zone. When `export_target` includes `zones`, that block includes the hosted zone metadata and any private-zone VPC associations.
 - `zones_file`: locals describing each exported hosted zone, including its tags and private-zone/VPC metadata.
 - `single_zone_records_file` (single-zone mode only): a single file containing the rendered locals for that primary zone.
 - `imports_file`: Terraform `import` blocks for the zone resources and every `aws_route53_record`, ready to feed into `terraform`/`tofu import`.
@@ -106,4 +106,3 @@ All files are replaced atomically on each run, so commit the outputs if you want
 4. Run `tofu fmt`.
 5. Inspect the generated `route53-records-*.tf`, `config-zones.tf`, and `imports.tf` files and run `tofu plan` to check results.
 6. Add the files to version control along with the corresponding Terraform modules to keep AWS and IaC synchronized.
-

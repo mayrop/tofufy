@@ -720,7 +720,11 @@ def write_imports_file(
     imports_path.write_text(content, encoding="utf-8")
 
 
-def update_single_zone_locals(zone_name: str, locals_path: Path) -> None:
+def update_single_zone_locals(
+    zone_details: Dict[str, Any],
+    locals_path: Path,
+    include_tags: bool = True,
+) -> None:
     locals_path.parent.mkdir(parents=True, exist_ok=True)
     if locals_path.exists():
         original = locals_path.read_text(encoding="utf-8")
@@ -733,18 +737,11 @@ def update_single_zone_locals(zone_name: str, locals_path: Path) -> None:
     )
     cleaned = re.sub(pattern, "", original).rstrip()
 
-    zone_block = [
-        SINGLE_ZONE_BEGIN_MARKER,
-        "locals {",
-        "  zone = {",
-        f"    name    = {json.dumps(zone_name)}",
-        f"    comment = {json.dumps(f'Primary {zone_name} zone')}",
-        "    tags    = {}",
-        "  }",
-        "}",
-        SINGLE_ZONE_END_MARKER,
-        "",
-    ]
+    zone_attributes = build_zone_configuration(zone_details, include_tags=include_tags)
+    zone_block: List[str] = [SINGLE_ZONE_BEGIN_MARKER, "locals {", "  zone = {"]
+    for attr_name, attr_value in zone_attributes.items():
+        render_attribute_block(attr_name, attr_value, 2, zone_block)
+    zone_block.extend(["  }", "}", SINGLE_ZONE_END_MARKER, ""])
 
     generated = "\n".join(zone_block)
     if cleaned:
@@ -910,11 +907,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     if single_zone_mode and len(zone_ids) != 1:
         print("--single-zone requires exactly one hosted zone ID", file=sys.stderr)
         return 1
-    if single_zone_mode and export_zones_enabled and not export_records_enabled:
-        print("Zones-only export is not supported with --single-zone", file=sys.stderr)
-        return 1
     zone_export_enabled = export_zones_enabled and not single_zone_mode
-    include_zone_tags = zone_export_enabled and not skip_zone_tags
+    include_zone_tags = export_zones_enabled and not skip_zone_tags
 
     try:
         session = build_session(args.profile)
@@ -931,11 +925,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     if single_zone_mode:
         records_path = Path(args.single_zone_records_file)
         zone_id = zone_ids[0]
-        if export_records_enabled:
-            try:
-                zone_details = get_zone_details(client, zone_id, include_tags=include_zone_tags)
-                zone_name = zone_details["name"]
-                private_zone = bool(zone_details["private_zone"])
+        per_zone_messages: List[str] = []
+        try:
+            zone_details = get_zone_details(client, zone_id, include_tags=include_zone_tags)
+            zone_name = zone_details["name"]
+            private_zone = bool(zone_details["private_zone"])
+
+            if export_records_enabled:
                 (
                     _zone_key,
                     _local_var,
@@ -951,21 +947,25 @@ def main(argv: Optional[List[str]] = None) -> int:
                     include_patterns=include_patterns,
                 )
                 write_single_zone_records(record_blocks, records_path)
-                update_single_zone_locals(zone_name, Path(args.locals_file))
-            except (ClientError, BotoCoreError) as exc:
-                print(f"Failed to export records for {zone_id}: {exc}", file=sys.stderr)
-            except OSError as exc:
-                print(f"Failed to write records for {zone_id}: {exc}", file=sys.stderr)
-            else:
                 aggregate_imports.extend(import_entries)
-                successes = 1
+                per_zone_messages.append(f"records -> {records_path}")
+
+            if export_zones_enabled:
+                update_single_zone_locals(
+                    zone_details,
+                    Path(args.locals_file),
+                    include_tags=not skip_zone_tags,
+                )
                 zone_resource_import_id = zone_id
-                print(f"Exported {zone_id} -> {records_path}")
-        if export_zones_enabled and not zone_export_enabled:
-            print(
-                "Zone export is not supported in --single-zone mode; skipping zone output.",
-                file=sys.stderr,
-            )
+                per_zone_messages.append(f"zone metadata -> {args.locals_file}")
+        except (ClientError, BotoCoreError) as exc:
+            print(f"Failed to export data for {zone_id}: {exc}", file=sys.stderr)
+        except OSError as exc:
+            print(f"Failed to write data for {zone_id}: {exc}", file=sys.stderr)
+        else:
+            if per_zone_messages:
+                successes = 1
+                print(f"Exported {zone_id}: {', '.join(per_zone_messages)}")
     else:
         output_dir = Path(args.output_dir)
         if export_records_enabled:
